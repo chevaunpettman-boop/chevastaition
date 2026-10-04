@@ -1,0 +1,6 @@
+{
+  "name": "SiamHarvest Global",
+  "description": "Cross-border e-commerce platform delivering authentic Thai market specialties, artisanal pantry goods, and cold-chain delicacies worldwide with real-time operations console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

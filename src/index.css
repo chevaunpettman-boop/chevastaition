@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-khaki-primary: #4A5335;
+  --color-khaki-dark: #373E28;
+  --color-khaki-light: #727B5A;
+  --color-khaki-subtle: #EDF0E8;
+
+  --color-beige-bg: #F7F5F0;
+  --color-beige-card: #F3EFE6;
+  --color-beige-surface: #EFECE6;
+  --color-sand-border: #E2DDD5;
+  --color-sand-dark: #D4CDC2;
+
+  --color-charcoal: #1F241A;
+  --color-slate-muted: #63685E;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-thai: 'Prompt', 'Plus Jakarta Sans', sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: #1F241A;
+    background-color: #F7F5F0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .font-serif-brand {
+    font-family: var(--font-display);
+  }
+
+  .font-thai {
+    font-family: var(--font-thai);
+  }
+}
+
+/* Custom subtle scrollbar in sand tone */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #E2DDD5;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #D4CDC2;
+}

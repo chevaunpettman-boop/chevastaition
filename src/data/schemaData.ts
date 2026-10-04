@@ -1,0 +1,203 @@
+export interface SchemaTable {
+  name: string;
+  description: string;
+  columns: Array<{ name: string; type: string; constraints: string; note: string }>;
+  indexes: string[];
+}
+
+export const DATABASE_SCHEMAS: SchemaTable[] = [
+  {
+    name: 'users',
+    description: 'Core customer accounts, WebAuthn biometric credentials, and GDPR/PDPA privacy consents',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Global unique user ID' },
+      { name: 'email', type: 'VARCHAR(255)', constraints: 'UNIQUE NOT NULL', note: 'Customer email' },
+      { name: 'phone_e164', type: 'VARCHAR(20)', constraints: 'NULL', note: 'Standard international format (e.g. +6681...)' },
+      { name: 'password_hash', type: 'VARCHAR(255)', constraints: 'NOT NULL', note: 'Argon2id cryptographic hash' },
+      { name: 'biometric_public_key', type: 'TEXT', constraints: 'NULL', note: 'FIDO2 / WebAuthn public key credential' },
+      { name: 'loyalty_tier', type: 'VARCHAR(32)', constraints: "DEFAULT 'Silver'", note: 'Silver | Gold | Jade | Royal Elephant' },
+      { name: 'points_balance', type: 'INTEGER', constraints: 'DEFAULT 0 CHECK (points_balance >= 0)', note: 'Smile.io sync balance' },
+      { name: 'pdpa_consent_at', type: 'TIMESTAMPTZ', constraints: 'NOT NULL', note: 'Thailand PDPA Act B.E. 2562 consent record' },
+      { name: 'created_at', type: 'TIMESTAMPTZ', constraints: 'DEFAULT CURRENT_TIMESTAMP', note: 'Account registration time' },
+    ],
+    indexes: ['CREATE UNIQUE INDEX idx_users_email ON users(email);', 'CREATE INDEX idx_users_loyalty_tier ON users(loyalty_tier);'],
+  },
+  {
+    name: 'products',
+    description: 'Thai market catalog items with phonetic indexing, customs HS tariff codes, and perishability flags',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Product identifier' },
+      { name: 'sku', type: 'VARCHAR(64)', constraints: 'UNIQUE NOT NULL', note: 'Stock Keeping Unit' },
+      { name: 'name_en', type: 'VARCHAR(255)', constraints: 'NOT NULL', note: 'English catalog title' },
+      { name: 'name_th', type: 'VARCHAR(255)', constraints: 'NOT NULL', note: 'Thai script catalog title' },
+      { name: 'name_phonetic', type: 'VARCHAR(255)', constraints: 'NOT NULL', note: 'Romanised phonetics (e.g., Nam Prik Pao)' },
+      { name: 'category_id', type: 'UUID', constraints: 'REFERENCES categories(id)', note: 'Product taxonomy node' },
+      { name: 'hs_tariff_code', type: 'VARCHAR(12)', constraints: 'NOT NULL', note: 'Harmonized System 6/10-digit code' },
+      { name: 'is_perishable', type: 'BOOLEAN', constraints: 'DEFAULT FALSE', note: 'Requires cold chain or expedited air transit' },
+      { name: 'storage_temp_min_c', type: 'NUMERIC(4,1)', constraints: 'DEFAULT 15.0', note: 'Lower temperature boundary' },
+      { name: 'storage_temp_max_c', type: 'NUMERIC(4,1)', constraints: 'DEFAULT 25.0', note: 'Upper temperature boundary' },
+      { name: 'weight_grams', type: 'INTEGER', constraints: 'NOT NULL', note: 'Net physical weight' },
+      { name: 'dim_length_cm', type: 'NUMERIC(5,2)', constraints: 'NOT NULL', note: 'Carton dimension length' },
+      { name: 'dim_width_cm', type: 'NUMERIC(5,2)', constraints: 'NOT NULL', note: 'Carton dimension width' },
+      { name: 'dim_height_cm', type: 'NUMERIC(5,2)', constraints: 'NOT NULL', note: 'Carton dimension height' },
+      { name: 'phytosanitary_required', type: 'BOOLEAN', constraints: 'DEFAULT FALSE', note: 'Requires DOA Thailand health cert' },
+    ],
+    indexes: [
+      'CREATE INDEX idx_products_sku ON products(sku);',
+      'CREATE INDEX idx_products_search ON products USING gin(to_tsvector(\'english\', name_en || \' \' || name_phonetic));',
+      'CREATE INDEX idx_products_perishable ON products(is_perishable);',
+    ],
+  },
+  {
+    name: 'product_variants',
+    description: 'Variant-heavy matrix for fashion, footwear, and lifestyle goods (sizes, color hexes, barcodes)',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Unique variant SKU id' },
+      { name: 'product_id', type: 'UUID', constraints: 'REFERENCES products(id) ON DELETE CASCADE', note: 'Parent catalog item' },
+      { name: 'variant_sku', type: 'VARCHAR(64)', constraints: 'UNIQUE NOT NULL', note: 'Specific SKU (e.g. BT-WF-SILK01-IVORY-S)' },
+      { name: 'color_name', type: 'VARCHAR(64)', constraints: 'NULL', note: 'e.g. Sand Ivory, Earthy Khaki' },
+      { name: 'color_hex', type: 'VARCHAR(7)', constraints: 'NULL', note: '#F3EFE6, #4A5335' },
+      { name: 'size_label', type: 'VARCHAR(32)', constraints: 'NULL', note: 'XS, S, M, L, XL, EU 38' },
+      { name: 'size_standard', type: 'VARCHAR(16)', constraints: "DEFAULT 'US'", note: 'US | EU | UK | Asia' },
+      { name: 'price_override_usd', type: 'NUMERIC(10,2)', constraints: 'NULL', note: 'Optional variant surcharge' },
+      { name: 'inventory_count', type: 'INTEGER', constraints: 'DEFAULT 0 CHECK (inventory_count >= 0)', note: 'Global variant inventory' },
+    ],
+    indexes: [
+      'CREATE INDEX idx_variants_product ON product_variants(product_id);',
+      'CREATE UNIQUE INDEX idx_variants_unique ON product_variants(product_id, color_name, size_label);',
+    ],
+  },
+  {
+    name: 'scent_profiles',
+    description: 'Botanical fragrance olfactory structure and longevity ratings for Thai perfumery',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Scent profile identifier' },
+      { name: 'product_id', type: 'UUID', constraints: 'REFERENCES products(id) ON DELETE CASCADE', note: 'Fragrance item reference' },
+      { name: 'top_notes', type: 'TEXT[]', constraints: 'NOT NULL', note: 'Jasmine Sambac, Kaffir Lime, Bergamot' },
+      { name: 'middle_notes', type: 'TEXT[]', constraints: 'NOT NULL', note: 'White Champaca, Frangipani, Lemongrass' },
+      { name: 'base_notes', type: 'TEXT[]', constraints: 'NOT NULL', note: 'Trat Wild Agarwood, Siam Amber, Teak' },
+      { name: 'intensity_level', type: 'VARCHAR(32)', constraints: "DEFAULT 'Moderate'", note: 'Delicate | Moderate | Intense' },
+      { name: 'longevity_hours', type: 'INTEGER', constraints: 'DEFAULT 8', note: 'Estimated sillage duration' },
+    ],
+    indexes: ['CREATE INDEX idx_scent_product ON scent_profiles(product_id);'],
+  },
+  {
+    name: 'product_lots_and_batches',
+    description: 'Food safety traceability, farm provenance, harvest dates, and expiration threshold tracking',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Lot identifier' },
+      { name: 'product_id', type: 'UUID', constraints: 'REFERENCES products(id) ON DELETE RESTRICT', note: 'Product reference' },
+      { name: 'lot_number', type: 'VARCHAR(64)', constraints: 'UNIQUE NOT NULL', note: 'Lot # (e.g., LOT-TH-2026-BKK-084)' },
+      { name: 'origin_cooperative', type: 'VARCHAR(255)', constraints: 'NOT NULL', note: 'Sourcing cooperative or farm' },
+      { name: 'production_date', type: 'DATE', constraints: 'NOT NULL', note: 'Manufacture or harvest date' },
+      { name: 'expiry_date', type: 'DATE', constraints: 'NOT NULL', note: 'Mandatory best before / expiration date' },
+      { name: 'qc_passed_at', type: 'TIMESTAMPTZ', constraints: 'NOT NULL', note: 'Quality control sign-off' },
+      { name: 'phyto_cert_number', type: 'VARCHAR(64)', constraints: 'NULL', note: 'Ministry of Agriculture export clearance' },
+    ],
+    indexes: ['CREATE INDEX idx_lots_expiry ON product_lots_and_batches(expiry_date);', 'CREATE INDEX idx_lots_product ON product_lots_and_batches(product_id);'],
+  },
+  {
+    name: 'warehouse_inventory',
+    description: 'Multi-warehouse stock partition across Bangkok, Chiang Mai, LAX, and Frankfurt cross-docks',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Inventory node ID' },
+      { name: 'warehouse_code', type: 'VARCHAR(16)', constraints: 'NOT NULL', note: 'BKK-HUB | CNX-DEPOT | LAX-FWD | FRA-FWD' },
+      { name: 'product_id', type: 'UUID', constraints: 'REFERENCES products(id)', note: 'Product reference' },
+      { name: 'lot_id', type: 'UUID', constraints: 'REFERENCES product_lots_and_batches(id)', note: 'Specific lot' },
+      { name: 'quantity_available', type: 'INTEGER', constraints: 'NOT NULL CHECK (quantity_available >= 0)', note: 'Pickable stock' },
+      { name: 'quantity_reserved', type: 'INTEGER', constraints: 'DEFAULT 0', note: 'Pending checkout hold' },
+      { name: 'zone_type', type: 'VARCHAR(32)', constraints: "DEFAULT 'ambient'", note: 'ambient | chilled_2_4c | deep_frozen_18c' },
+      { name: 'last_cycle_count_at', type: 'TIMESTAMPTZ', constraints: 'NOT NULL', note: 'Inventory audit timestamp' },
+    ],
+    indexes: [
+      'CREATE UNIQUE INDEX idx_wh_stock_unique ON warehouse_inventory(warehouse_code, product_id, lot_id);',
+      'CREATE INDEX idx_wh_stock_low ON warehouse_inventory(warehouse_code, quantity_available);',
+    ],
+  },
+  {
+    name: 'orders',
+    description: 'Cross-border transactional orders, multi-currency values, customs duty declarations & payment tokens',
+    columns: [
+      { name: 'id', type: 'UUID', constraints: 'PRIMARY KEY DEFAULT gen_random_uuid()', note: 'Order ID' },
+      { name: 'order_number', type: 'VARCHAR(32)', constraints: 'UNIQUE NOT NULL', note: 'Human-readable order sequence' },
+      { name: 'user_id', type: 'UUID', constraints: 'REFERENCES users(id)', note: 'Customer reference' },
+      { name: 'currency', type: 'VARCHAR(3)', constraints: "DEFAULT 'USD'", note: 'ISO 4217 Currency Code' },
+      { name: 'subtotal_usd', type: 'NUMERIC(10,2)', constraints: 'NOT NULL', note: 'Base line items total' },
+      { name: 'duties_and_taxes_usd', type: 'NUMERIC(10,2)', constraints: 'NOT NULL', note: 'Calculated local VAT/GST/duties' },
+      { name: 'shipping_fee_usd', type: 'NUMERIC(10,2)', constraints: 'NOT NULL', note: 'Air freight charge' },
+      { name: 'total_usd', type: 'NUMERIC(10,2)', constraints: 'NOT NULL', note: 'Settled aggregate' },
+      { name: 'destination_country', type: 'VARCHAR(2)', constraints: 'NOT NULL', note: 'ISO 3166-1 alpha-2' },
+      { name: 'payment_gateway', type: 'VARCHAR(32)', constraints: 'NOT NULL', note: 'promptpay | stripe | applepay' },
+      { name: 'payment_ref', type: 'VARCHAR(255)', constraints: 'NULL', note: 'PromptPay biller ID / gateway charge ID' },
+      { name: 'risk_score', type: 'INTEGER', constraints: 'DEFAULT 0', note: 'Fraud score (0-100), >70 triggers 2FA' },
+      { name: 'status', type: 'VARCHAR(32)', constraints: "DEFAULT 'processing'", note: 'processing | dispatched | delivered' },
+    ],
+    indexes: [
+      'CREATE INDEX idx_orders_user ON orders(user_id);',
+      'CREATE INDEX idx_orders_status ON orders(status);',
+      'CREATE INDEX idx_orders_created ON orders(created_at DESC);',
+    ],
+  },
+  {
+    name: 'audit_logs',
+    description: 'Immutable system event log for administrative actions, RBAC changes, and refund approvals',
+    columns: [
+      { name: 'id', type: 'BIGSERIAL', constraints: 'PRIMARY KEY', note: 'Sequential log sequence' },
+      { name: 'actor_id', type: 'UUID', constraints: 'NOT NULL', note: 'Operator ID' },
+      { name: 'actor_role', type: 'VARCHAR(32)', constraints: 'NOT NULL', note: 'super_admin | logistics_mgr | support_lead' },
+      { name: 'action', type: 'VARCHAR(64)', constraints: 'NOT NULL', note: 'e.g., INVENTORY_OVERRIDE, REFUND_ISSUED' },
+      { name: 'resource_type', type: 'VARCHAR(64)', constraints: 'NOT NULL', note: 'Target entity' },
+      { name: 'resource_id', type: 'VARCHAR(64)', constraints: 'NOT NULL', note: 'Target key' },
+      { name: 'ip_address', type: 'INET', constraints: 'NOT NULL', note: 'Caller IP' },
+      { name: 'payload_before', type: 'JSONB', constraints: 'NULL', note: 'State before mutation' },
+      { name: 'payload_after', type: 'JSONB', constraints: 'NULL', note: 'State after mutation' },
+      { name: 'created_at', type: 'TIMESTAMPTZ', constraints: 'DEFAULT CURRENT_TIMESTAMP', note: 'Tamper-proof event time' },
+    ],
+    indexes: ['CREATE INDEX idx_audit_created ON audit_logs(created_at DESC);', 'CREATE INDEX idx_audit_actor ON audit_logs(actor_id);'],
+  }
+];
+
+export const API_ENDPOINTS = [
+  {
+    method: 'GET',
+    path: '/api/v1/products',
+    summary: 'Search products with multilingual query and phonetic fuzzy matcher',
+    params: 'q=nam+prik&category=curry&dietary=halal,vegan&spice_level=2&lang=th',
+    response: '200 OK — Array of localized Product entities with stock availability by warehouse',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/checkout/quote-taxes',
+    summary: 'Calculate destination duties, VAT/GST & volumetric shipping weight',
+    params: 'Body: { items: [...], destination_country: "US", postal_code: "90210" }',
+    response: '200 OK — { subtotal, duty_rate, duties_usd, vat_usd, volumetric_kg, billable_weight_kg }',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/payments/promptpay/generate',
+    summary: 'Generate EMVCo-compliant Thai QR PromptPay payload with biller reference',
+    params: 'Body: { order_id: "ord_91823", amount_thb: 1420.50 }',
+    response: '201 Created — { qr_raw_payload, promptpay_id: "081-992-8172", expires_at, qr_svg }',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/auth/webauthn/verify',
+    summary: 'Biometric passkey signature verification (FIDO2 Touch ID / Face ID)',
+    params: 'Body: { credential_id, client_data_json, signature, authenticator_data }',
+    response: '200 OK — { token: "jwt_...", user: { name, email, loyalty_tier } }',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/shipments/:tracking_number/telemetry',
+    summary: 'Real-time air freight tracking with IoT cold-chain temperature telemetry',
+    params: 'Path: tracking_number = "TH-AWB-2026-98124"',
+    response: '200 OK — { flight_no: "TG692", origin_bkk: true, phyto_cleared: true, current_temp_c: 3.8, steps: [...] }',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/returns/claims',
+    summary: 'Initiate self-service return with automatic perishable item instant credit logic',
+    params: 'Body: { order_id, item_sku, reason: "damaged_leaf", photos: ["s3://..."] }',
+    response: '200 OK — { resolution: "INSTANT_STORE_CREDIT_PERISHABLE_WAIVED", credit_usd: 18.50 }',
+  },
+];
